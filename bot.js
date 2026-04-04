@@ -1,13 +1,11 @@
 const { Client, GatewayIntentBits } = require("discord.js");
 const axios = require("axios");
 
-// ENV
 const TOKEN = process.env.TOKEN;
 const YT_API_KEY = process.env.YT_API_KEY;
 const VIDEO_ID = process.env.VIDEO_ID;
 const VERIFIED_ROLE = "Verified";
 
-// client
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -17,26 +15,29 @@ const client = new Client({
   ]
 });
 
-// memory
 const users = {};
 
-// code generator
 function generateCode() {
   return "PX-" + Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
-// fetch comments
 async function fetchComments() {
-  const url = `https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&videoId=${VIDEO_ID}&maxResults=100&key=${YT_API_KEY}`;
-  const res = await axios.get(url);
+  try {
+    const url = `https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&videoId=${VIDEO_ID}&maxResults=100&key=${YT_API_KEY}`;
+    const res = await axios.get(url);
 
-  return res.data.items.map(i => ({
-    text: i.snippet.topLevelComment.snippet.textDisplay,
-    author: i.snippet.topLevelComment.snippet.authorDisplayName
-  }));
+    if (!res.data.items) return [];
+
+    return res.data.items.map(i => ({
+      text: i.snippet.topLevelComment.snippet.textDisplay || "",
+      author: i.snippet.topLevelComment.snippet.authorDisplayName || ""
+    }));
+  } catch (err) {
+    console.log("YT ERROR:", err.message);
+    return [];
+  }
 }
 
-// verify
 async function verifyUser(msg) {
   const data = users[msg.author.id];
   if (!data) return msg.reply("❌ Pehle !verify karo");
@@ -48,38 +49,30 @@ async function verifyUser(msg) {
 
   msg.reply("⏳ Checking...");
 
-  try {
-    const comments = await fetchComments();
+  const comments = await fetchComments();
 
-    const found = comments.find(c =>
-      c.text.includes(data.code) &&
-      c.author.toLowerCase().includes(msg.author.username.toLowerCase())
-    );
+  const found = comments.find(c =>
+    c.text.includes(data.code)
+  );
 
-    if (found) {
-      const role = msg.guild.roles.cache.find(r => r.name === VERIFIED_ROLE);
-      if (!role) return msg.reply("❌ Role nahi mila");
+  if (found) {
+    const role = msg.guild.roles.cache.find(r => r.name === VERIFIED_ROLE);
+    if (!role) return msg.reply("❌ Role nahi mila");
 
-      const member = msg.guild.members.cache.get(msg.author.id);
-      await member.roles.add(role);
+    const member = msg.guild.members.cache.get(msg.author.id);
+    await member.roles.add(role);
 
-      delete users[msg.author.id];
-      return msg.reply("✅ VERIFIED");
-    }
-
-    msg.reply("❌ Code nahi mila");
-  } catch (err) {
-    console.log(err);
-    msg.reply("⚠️ Error");
+    delete users[msg.author.id];
+    return msg.reply("✅ VERIFIED 🔓");
   }
+
+  msg.reply("❌ Code nahi mila");
 }
 
-// ready
 client.on("ready", () => {
   console.log("🔥 BOT ONLINE:", client.user.tag);
 });
 
-// commands
 client.on("messageCreate", async (msg) => {
   if (msg.author.bot) return;
 
@@ -91,7 +84,10 @@ client.on("messageCreate", async (msg) => {
       expiry: Date.now() + 5 * 60 * 1000
     };
 
-    await msg.author.send(`Code: ${code}\nComment karo YouTube pe\nPhir !done`);
+    await msg.author.send(
+      `Code: ${code}\nYouTube pe comment karo\nPhir !done likho`
+    );
+
     msg.reply("📩 DM check karo");
   }
 
@@ -100,5 +96,4 @@ client.on("messageCreate", async (msg) => {
   }
 });
 
-// login
 client.login(TOKEN);
